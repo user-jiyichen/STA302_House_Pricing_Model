@@ -3,6 +3,6 @@ This is a instructed course project about fitting a multiple linear model for To
 
 The data was obtained from the Toronto Real Estate Board(TREB) on detached houses in two separate neighborhoods in the Great Toronto Area, the city of Toronto and the city of Mississauga.
 
-Please see code.rmd and/or output.html for more details.
+Please see R code.rmd and/or output.html for more details.
 
 :)
