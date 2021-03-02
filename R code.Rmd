@@ -1,0 +1,223 @@
+---
+title: 'STA 302 A3: MLR Model for Toronto and Mississauga House Prices'
+author: "Yichen Ji ID:1004728967"
+date: "2020/11/28"
+output:
+  html_document:
+    df_print: paged
+  word_document: default
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+
+```{r, include=FALSE}
+# set working directory and libraries
+library(tidyverse)
+library(dplyr)
+dataYJ=read.csv("real203.csv")
+attach(dataYJ)
+glimpse(dataYJ)
+```
+
+## Introduction
+
+In this report, I will use TREB data and construct a MLR model to help predict the sale price of single-family, detached houses in two neighborhoods in the GTA area.
+
+## I. Data Wrangling
+
+#### (a)
+
+We first randomly select a sample of 150 cases and report their IDs:
+
+```{r,echo=FALSE}
+# collect sample data
+# (a)
+set.seed(1004728967) # set the seed of randomization
+id8967=sample(nrow(dataYJ),150) #ids of 150 random samples
+sample8967 = dataYJ[id8967,] # 150 samples drawn from the population
+id8967
+```
+#### (b)
+
+Then we use a new variable called 'lotsize' to replace 'lotwidth' and 'lotlength':
+
+```{r}
+lotsize = sample8967$lotlength * sample8967$lotwidth
+sampleYJ = select (sample8967,-c(lotwidth, lotlength))
+sampleYJ$lotsize = lotsize # replace lotwidth, lotlength with lotsize
+```
+
+#### (c)
+
+Now we clean the data by first looking at the summary of the sample:
+
+```{r,echo=FALSE}
+summary(sampleYJ)
+```
+
+ We can see that there are several missing values in 'parking', 'taxes' and 'lotsize' (7, 1 and 2 respectively).  Also, 'maxsqfoot' has 90 missing values, which would give us a big hurdle to interpret the result when we include this variable and run MLR. Therefore, we remove 'maxsqfoot' as well as those 10 cases containing missing values.
+ 
+Then, if we have a glimpse at the scatter plot of sale price by lotsize:
+ 
+```{r, echo = FALSE, message=FALSE,warning=FALSE}
+mlist=lm(sampleYJ[,2]~sampleYJ[,10]) #SLR model
+ggplot(sampleYJ, aes(x=sampleYJ[,10],y=sampleYJ[,2]))+geom_point()+labs(title="Scatterplot of Sale Price by Lotsize #8967")+xlab('Lotsize (Square Feet)')+ylab('Actual Sale Price (CAD)')+geom_smooth(method ="lm")
+# use tidyverse gg-plot to get scatter plots
+```
+
+There are two high leverage points (lotsize>30000) lying off from the pattern of the bulk of data. Since we are only allowed to remove at most 11 cases, we only remove the point with highest leverage(lotsize>40000):
+
+```{r, echo=FALSE, message=FALSE}
+sub8967=filter(sampleYJ,lotsize != 'NA', parking != 'NA', taxes != 'NA', lotsize<40000)
+# remove all the missing values and a leverage point
+
+ggplot(sub8967, aes(x=sub8967[,10],y=sub8967[,2]))+geom_point()+labs(title="Scatterplot of Sale Price by Lotsize(Removed) #8967")+xlab('Lotsize (Square Feet)')+ylab('Actual Sale Price (CAD)')+geom_smooth(method ="lm")
+
+```
+
+```{r, echo=FALSE}
+subYJ = select (sub8967,-c(maxsqfoot))
+# we use data subYJ from now on
+```
+
+## II. Exploratory Data Analysis
+
+#### (a) 
+
+Here's the classification of variables:
+
+Categorical Variables: location
+
+Discrete Variables: ID, bedroom, bathroom, parking
+
+Continuous Variables: sale, list, taxes, lotsize
+
+
+#### (b)
+
+Here are the pairwise correlation matrix and scatter plot matrix for all pairs of quantitative variables i.e. without 'location' and 'ID':
+
+```{r, echo=FALSE}
+# define cleaned data variables for convenience
+saleYJ = subYJ$sale
+listYJ = subYJ$list
+bedroomYJ = subYJ$bedroom
+bathroomYJ = subYJ$bathroom
+parkingYJ = subYJ$parking
+taxesYJ = subYJ$taxes
+lotsizeYJ = subYJ$lotsize
+locationYJ = subYJ$location
+
+#generate pairwise correlation and scatter plot matrices
+numericx=cbind(saleYJ,listYJ,bedroomYJ,bathroomYJ,parkingYJ,taxesYJ,lotsizeYJ)
+round(cor(numericx,use = "complete.obs"), 4)
+pairs(~saleYJ+listYJ+bedroomYJ+bathroomYJ+parkingYJ+taxesYJ+lotsizeYJ,
+      data=subYJ,gap=0.4,cex.labels=0.85)
+```
+
+Then we rank the predictors in terms of their correlation coefficient for sale price (from the highest to lowest):
+
+```{r, echo=FALSE}
+a = cor(numericx,use = "complete.obs")[1,]
+rank(-c(a))
+```
+
+We get: list > taxes > bathroom > bedroom > lotsize > parking.
+
+#### (c)
+
+If we check the diagnostic plot of sale price on bedroom:
+
+```{r,echo=FALSE}
+lm_tax_sale=lm(saleYJ~bedroomYJ)
+plot(lm_tax_sale, which=c(3,3))
+```
+
+Based on the scale-location plot, the red smooth line is not horizontal but upward sloping and the standardized residuals spread wider and wider, indicating a strong violation against the assumption of equal variance (homoscedasticity).
+
+
+## III. Methods and Model
+
+#### (i)
+
+First, fit an additive regression model:
+```{r}
+full.lm = lm(saleYJ ~ listYJ + taxesYJ + lotsizeYJ + bedroomYJ + bathroomYJ + parkingYJ + locationYJ)
+```
+
+Then we list their estimated coefficients and p-values:
+
+```{r, echo=FALSE}
+coefficient = summary(full.lm)$coefficients[,1]
+p_value = summary(full.lm)$coefficients[,4]
+c = data.frame(coefficient,p_value)
+round(c,4)
+```
+
+As we can see, there are 3 significant t-test results (list, taxes and location) by the 5% significance level. The interpretation of each coefficient is:
+
+1. Holding other factors fixed, an additional dollar increase in the last list price is expected to increase $0.8321 in the mean actual sale price.
+
+2. Holding other factors fixed, an additional dollar increase in the previous year's taxes is expected to increase the mean actual sale price by $21.651.
+
+3. Holding other factors fixed, the properties in Toronto Neighborhood are expected to have the mean actual sale price about $84928 higher than those in Mississauga Neighborhood.
+
+#### (ii)
+
+If we perform backward elimination with AIC:
+```{r,echo=FALSE, include=FALSE}
+step(full.lm, direction = "backward")
+```
+
+Leaving out the steps, the final model using backward elimination with AIC is $$sale = 1.189*10^5+0.8432\ list+20.36\ taxes - 1.223*10^4\ parking + 8.583*10^4\ location$$
+This result is inconsistent with those in (i) since one insignificant predictor 'parking' whose p-values > 0.05 is still in the final model. That's because the penalty for model complexity is not strong enough, so AIC overfits the sample.
+
+#### (iii)
+
+```{r,echo=FALSE, include=FALSE}
+step(full.lm, direction = "backward", k=log(140)) # 140 datapoints in sample
+```
+The final model using backward elimination with BIC is $$sale = 7.325*10^4+0.8356\ list+ 19.84\ taxes+1.27*10^5\ location$$ 
+This result is consistent with our t-test and p-value output and inconsistent with backward AIC tautologically. BIC penalizes complex model more heavily than AIC, thus favors simpler models than AIC.
+
+
+## IV. Discussion and Limitations
+
+#### (a)
+
+Diagnostic plots for our MLR additive model:
+```{r,echo=FALSE}
+reduced.lm=lm(saleYJ~listYJ + taxesYJ + locationYJ)
+par(mfrow = c(2, 2))  # Split the plotting panel into a 2 x 2 grid
+plot(reduced.lm)
+```
+
+#### (b)
+
+Interpretation of residual plots:
+
+- Residuals v.s. Fitted plot: The residual points are randomly scattered and the red smooth line is horizontally lying around 0, which is a good sign that residuals are uncorrelated with the fitted values and there is no non-linear relationship.
+
+- Normal Q-Q plot: Except for few outliers e.g. #1, #74, #90, most points follow along the straight line, so we can say residuals are normally distributed.
+
+- Scale-Location plot: The distribution of standardized residuals has no distinct trend and data-points are randomly spread, similar to the Residual v.s. Fitted plot.
+
+- Residuals v.s. Leverage plot: There is no noteworthy point and all points are inside of the Cook's distance line, but there are few points with high leverage.
+
+As for MLR assumptions, I think all of them are well established(linearity, errors being uncorrelated with 0 mean, homoscedasticity, normality).
+
+
+#### (c)
+
+Next steps towards finding a valid model:
+
+1. Since Our goal is to predict the sale price, we can apply k-fold cross-validation to assess its predictive ability.
+
+2. We can also use the added variable plot to show the relationship between the response variable and one of the predictors after controlling for the presence of the other predictors.
+
+3. There are few leverage points that weren't considered since we are only allowed to remove 11 cases, so I'd like to identify and remove the outliers, then refit the model.
